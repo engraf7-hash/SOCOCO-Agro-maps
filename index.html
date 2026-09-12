@@ -81,18 +81,20 @@
   .panel-body{padding:10px 12px;display:flex;flex-direction:column;gap:8px;}
   .panel-note{font-size:11.5px;color:#8a8574;line-height:1.4;}
 
-  .layer-row{display:flex;align-items:center;gap:8px;padding:6px 8px;border:1px solid var(--line);border-radius:8px 8px 0 0;background:#FBFAF6;}
+  .layer-card{display:flex;flex-direction:column;gap:6px;padding:6px 8px;border:1px solid var(--line);border-radius:8px;background:#FBFAF6;}
+  .layer-row{display:flex;align-items:center;gap:8px;}
   .layer-row .lname{flex:1;font-size:13px;font-weight:600;}
   .layer-row .sub{display:flex;gap:2px;}
   .layer-row button.mini{width:22px;height:22px;border:none;background:var(--line);border-radius:5px;font-size:11px;}
-  .layer-row-wrap{}
-  .label-row{display:flex;align-items:center;gap:8px;padding:5px 8px;border:1px solid var(--line);border-top:none;border-radius:0 0 8px 8px;background:#F3F1EA;font-size:12px;}
-  .label-row .label-toggle{display:flex;align-items:center;gap:4px;white-space:nowrap;color:#555;}
-  .label-row select{flex:1;font-size:12px;padding:3px 4px;border-radius:5px;border:1px solid var(--line);background:#fff;min-width:0;}
+  .layer-row button.mini.label-btn{font-size:12px;}
+  .layer-row button.mini.label-btn.on{background:var(--forest);color:var(--white);}
   .swatch{width:10px;height:10px;border-radius:3px;flex-shrink:0;}
   .swatch-input{width:22px;height:22px;padding:0;border:1px solid #ccc;border-radius:5px;flex-shrink:0;background:none;}
   .swatch-input::-webkit-color-swatch-wrapper{padding:2px;}
   .swatch-input::-webkit-color-swatch{border:none;border-radius:3px;}
+  .layer-label-config{display:flex;align-items:center;gap:6px;padding-left:30px;}
+  .layer-label-config span{font-size:11px;color:#8a8574;flex-shrink:0;}
+  .layer-label-config select{flex:1;font-size:12px;padding:3px 4px;border:1px solid var(--line);border-radius:5px;background:var(--white);min-width:0;}
 
   .tool-btn-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
   .tool-btn{background:#FBFAF6;border:1px solid var(--line);border-radius:8px;padding:10px 6px;font-size:12px;font-weight:600;text-align:center;color:var(--forest);}
@@ -512,53 +514,6 @@
   });
 
   // ---------------- LAYERS (a) ----------------
-  var FIELD_FRIENDLY_NAMES = {
-    "Parcela":"Nome da parcela", "PARCELA":"Nome da parcela", "parcela":"Nome da parcela",
-    "nome":"Nome", "NOME":"Nome", "Nome":"Nome", "name":"Nome", "NAME":"Nome",
-    "id":"ID", "ID":"ID", "FID":"ID",
-    "Ha":"Área (ha)", "area":"Área", "ANO":"Ano", "PLANTAS":"Nº de plantas",
-    "VARIEDADE":"Variedade", "UDF":"UDF", "codigo":"Código"
-  };
-  var FIELD_PRIORITY = ["Parcela","PARCELA","parcela","nome","NOME","Nome","name","NAME","id","ID","FID","Ha","UDF","ANO","VARIEDADE","PLANTAS"];
-  var FIELD_SKIP = {"Rot_labels":true, "auxiliary_":true, "auxiliar_1":true, "auxiliar_2":true};
-
-  function fieldLabel(key){ return FIELD_FRIENDLY_NAMES[key] || key; }
-
-  function getLayerFieldOptions(geojson){
-    var seen = {};
-    var feats = (geojson && geojson.features) || [];
-    var sample = feats.slice(0, 30);
-    sample.forEach(function(f){
-      var props = f.properties || {};
-      Object.keys(props).forEach(function(k){
-        if(FIELD_SKIP[k]) return;
-        seen[k] = true;
-      });
-    });
-    var keys = Object.keys(seen);
-    keys.sort(function(a,b){
-      var pa = FIELD_PRIORITY.indexOf(a), pb = FIELD_PRIORITY.indexOf(b);
-      if(pa<0) pa = 999; if(pb<0) pb = 999;
-      if(pa!==pb) return pa-pb;
-      return a.localeCompare(b);
-    });
-    return keys.map(function(k){ return {key:k, label:fieldLabel(k)}; });
-  }
-
-  // Para camadas antigas (já salvas antes desta funcionalidade existir), decide um
-  // padrão razoável na hora, sem precisar o usuário reconfigurar nada.
-  function resolveLabelSettings(l){
-    if(l.labelOn!==undefined && l.labelField!==undefined){
-      return {on:l.labelOn, field:l.labelField};
-    }
-    var opts = getLayerFieldOptions(l.geojson).map(function(o){return o.key;});
-    var candidates = ["Parcela","PARCELA","parcela","nome","NOME","Nome","name","NAME"];
-    for(var i=0;i<candidates.length;i++){
-      if(opts.indexOf(candidates[i])>=0) return {on:true, field:candidates[i]};
-    }
-    return {on:false, field:opts[0]||null};
-  }
-
   function renderLayersPanel(){
     var list = document.getElementById("layers-list");
     if(!state.layers.length){
@@ -567,39 +522,32 @@
     }
     list.innerHTML = "";
     state.layers.forEach(function(l, idx){
-      var wrap = document.createElement("div");
-      wrap.className = "layer-row-wrap";
-
+      var card = document.createElement("div");
+      card.className = "layer-card";
       var row = document.createElement("div");
       row.className = "layer-row";
       row.innerHTML =
         '<input type="color" class="swatch-input" data-act="color" data-id="'+l.id+'" value="'+l.color+'" title="Trocar cor da camada">'+
         '<span class="lname">'+l.name+'</span>'+
         '<span class="sub">'+
+        '<button class="mini label-btn'+(l.labelVisible!==false?" on":"")+'" data-act="labeltoggle" data-id="'+l.id+'" title="Mostrar/ocultar rótulo desta camada">🏷</button>'+
         '<button class="mini" data-act="up" data-id="'+l.id+'" '+(idx===0?"disabled":"")+'>▲</button>'+
         '<button class="mini" data-act="down" data-id="'+l.id+'" '+(idx===state.layers.length-1?"disabled":"")+'>▼</button>'+
         '<button class="mini" data-act="del" data-id="'+l.id+'">✕</button>'+
         '</span>'+
         '<input type="checkbox" data-act="toggle" data-id="'+l.id+'" '+(l.visible?"checked":"")+'>';
-      wrap.appendChild(row);
-
-      var labelSettings = resolveLabelSettings(l);
-      var fieldOpts = getLayerFieldOptions(l.geojson);
-      var labelRow = document.createElement("div");
-      labelRow.className = "label-row";
-      var optsHtml = fieldOpts.map(function(o){
-        return '<option value="'+o.key+'" '+(o.key===labelSettings.field?"selected":"")+'>'+o.label+'</option>';
-      }).join("");
-      labelRow.innerHTML =
-        '<label class="label-toggle">'+
-        '<input type="checkbox" data-act="label-toggle" data-id="'+l.id+'" '+(labelSettings.on?"checked":"")+'>'+
-        '🏷️ Rótulo</label>'+
-        '<select data-act="label-field" data-id="'+l.id+'" '+(fieldOpts.length?"":"disabled")+'>'+
-        (fieldOpts.length ? optsHtml : '<option>— sem campos —</option>')+
-        '</select>';
-      wrap.appendChild(labelRow);
-
-      list.appendChild(wrap);
+      card.appendChild(row);
+      if(l.labelVisible!==false && l.fields && l.fields.length){
+        var labelRow = document.createElement("div");
+        labelRow.className = "layer-label-config";
+        var opts = '<option value="">Rótulo automático</option>';
+        l.fields.forEach(function(f){
+          opts += '<option value="'+f+'" '+(l.labelField===f?"selected":"")+'>'+f+'</option>';
+        });
+        labelRow.innerHTML = '<span>Rótulo:</span><select data-act="labelfield" data-id="'+l.id+'">'+opts+'</select>';
+        card.appendChild(labelRow);
+      }
+      list.appendChild(card);
     });
   }
   document.getElementById("layers-list").addEventListener("click", function(e){
@@ -611,6 +559,13 @@
     if(act==="del"){ removeLayer(idx); }
     if(act==="up" && idx>0){ swapLayers(idx, idx-1); }
     if(act==="down" && idx<state.layers.length-1){ swapLayers(idx, idx+1); }
+    if(act==="labeltoggle"){
+      var l = state.layers[idx];
+      l.labelVisible = l.labelVisible===false ? true : false;
+      applyLayerLabels(l);
+      renderLayersPanel();
+      persistLayers();
+    }
   });
   document.getElementById("layers-list").addEventListener("change", function(e){
     var t = e.target;
@@ -628,17 +583,9 @@
         if(child.setStyle){ child.setStyle({color:l.color, fillColor:l.color}); }
       });
       persistLayers();
-    } else if(act==="label-toggle"){
-      var cur = resolveLabelSettings(l);
-      l.labelOn = t.checked;
-      if(l.labelField===undefined) l.labelField = cur.field;
-      rebuildLayerRendering(l);
-      persistLayers();
-    } else if(act==="label-field"){
-      var cur2 = resolveLabelSettings(l);
-      l.labelField = t.value;
-      if(l.labelOn===undefined) l.labelOn = cur2.on;
-      rebuildLayerRendering(l);
+    } else if(act==="labelfield"){
+      l.labelField = t.value || null;
+      applyLayerLabels(l);
       persistLayers();
     }
   });
@@ -656,15 +603,52 @@
   function persistLayers(){
     if(!state.farm) return;
     var toSave = state.layers.map(function(l){
-      return {id:l.id, name:l.name, color:l.color, visible:l.visible, geojson:l.geojson,
-              labelOn:l.labelOn, labelField:l.labelField};
+      return {id:l.id, name:l.name, color:l.color, visible:l.visible, labelVisible:l.labelVisible, labelField:l.labelField, geojson:l.geojson};
     });
     storeSet("layers:"+state.farm.id, toSave);
   }
 
-  function buildLeafletLayer(l){
-    var color = l.color;
-    var labelSettings = resolveLabelSettings(l);
+  var LABEL_FIELD_CANDIDATES = ["Parcela","PARCELA","parcela","nome","NOME","Nome","name","NAME"];
+  function getFeatureLabel(props){
+    if(!props) return null;
+    for(var i=0;i<LABEL_FIELD_CANDIDATES.length;i++){
+      var v = props[LABEL_FIELD_CANDIDATES[i]];
+      if(v!==undefined && v!==null && String(v).trim()!=="") return String(v);
+    }
+    return null;
+  }
+  function collectLayerFields(geojson){
+    var fields = [];
+    var feats = (geojson && geojson.features) || [];
+    for(var i=0;i<feats.length && i<50;i++){
+      var props = feats[i].properties || {};
+      for(var k in props){
+        if(props.hasOwnProperty(k) && fields.indexOf(k)===-1) fields.push(k);
+      }
+    }
+    return fields;
+  }
+  function labelTextFor(entry, props){
+    if(entry.labelField){
+      var v = props ? props[entry.labelField] : null;
+      if(v!==undefined && v!==null && String(v).trim()!=="") return String(v);
+      return null;
+    }
+    return getFeatureLabel(props);
+  }
+  function applyLayerLabels(entry){
+    entry.leafletLayer.eachLayer(function(child){
+      if(child.getTooltip && child.getTooltip()) child.unbindTooltip();
+      if(entry.labelVisible!==false){
+        var text = labelTextFor(entry, child.feature && child.feature.properties);
+        if(text){
+          child.bindTooltip(text, {permanent:true, direction:"center", className:"parcel-label", opacity:0.9});
+        }
+      }
+    });
+  }
+  function addLayerToMap(l, persist){
+    var color = l.color || state.palette[state.layers.length % state.palette.length];
     var leafletLayer = L.geoJSON(l.geojson, {
       style:function(){ return {color:color, weight:2, fillOpacity:0.25}; },
       pointToLayer:function(feature, latlng){ return L.circleMarker(latlng, {radius:5, color:color, fillOpacity:0.7}); },
@@ -673,38 +657,21 @@
           L.DomEvent.stopPropagation(ev);
           showFeatureInfo(l.name, feature.properties || {});
         });
-        if(labelSettings.on && labelSettings.field){
-          var props = feature.properties || {};
-          var v = props[labelSettings.field];
-          if(v!==undefined && v!==null && String(v).trim()!==""){
-            lyr.bindTooltip(String(v), {permanent:true, direction:"center", className:"parcel-label", opacity:0.9});
-          }
-        }
       }
     });
-    return leafletLayer;
-  }
-
-  function rebuildLayerRendering(entry){
-    var wasVisible = state.map.hasLayer(entry.leafletLayer);
-    state.map.removeLayer(entry.leafletLayer);
-    entry.leafletLayer = buildLeafletLayer(entry);
-    if(wasVisible || entry.visible){ entry.leafletLayer.addTo(state.map); }
-  }
-
-  function addLayerToMap(l, persist){
-    var color = l.color || state.palette[state.layers.length % state.palette.length];
+    if(l.visible!==false){ leafletLayer.addTo(state.map); }
     var entry = {
-      id: l.id || ("layer_"+Date.now()+"_"+Math.random().toString(36).slice(2,7)),
-      name: l.name, color: color, visible: l.visible!==false, geojson: l.geojson,
-      labelOn: l.labelOn, labelField: l.labelField
+      id:l.id || ("layer_"+Date.now()+"_"+Math.random().toString(36).slice(2,7)),
+      name:l.name, color:color, visible:l.visible!==false,
+      labelVisible:l.labelVisible!==false, labelField:l.labelField || null,
+      fields:collectLayerFields(l.geojson),
+      geojson:l.geojson, leafletLayer:leafletLayer
     };
-    entry.leafletLayer = buildLeafletLayer(entry);
-    if(entry.visible){ entry.leafletLayer.addTo(state.map); }
     state.layers.push(entry);
+    applyLayerLabels(entry);
     if(persist) persistLayers();
     renderLayersPanel();
-    try{ state.map.fitBounds(entry.leafletLayer.getBounds(), {maxZoom:15}); }catch(e){}
+    try{ state.map.fitBounds(leafletLayer.getBounds(), {maxZoom:15}); }catch(e){}
   }
 
   function showFeatureInfo(layerName, props){
