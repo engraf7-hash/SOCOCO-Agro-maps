@@ -55,6 +55,14 @@
   /* ---------- MAP SCREEN ---------- */
   #map-screen{display:none;height:100%;width:100%;position:relative;}
   #map{position:absolute;inset:0;}
+  .parcel-label{
+    background:none!important;border:none!important;box-shadow:none!important;
+    color:#fff;font-weight:700;font-size:11px;
+    text-shadow:-1px -1px 0 #000,1px -1px 0 #000,-1px 1px 0 #000,1px 1px 0 #000,0 0 3px rgba(0,0,0,.8);
+    pointer-events:none;white-space:nowrap;
+  }
+  .parcel-label::before{display:none;}
+  #map.zoom-far .parcel-label{display:none;}
   #topbar{position:absolute;top:0;left:0;right:0;z-index:1000;height:52px;background:var(--forest);color:var(--white);display:flex;align-items:center;padding:0 8px;gap:8px;box-shadow:0 2px 8px rgba(0,0,0,0.15);}
   #topbar .icon-btn{background:none;border:none;color:var(--white);font-size:18px;width:36px;height:36px;border-radius:8px;display:flex;align-items:center;justify-content:center;}
   #topbar .icon-btn:active{background:rgba(255,255,255,0.15);}
@@ -73,11 +81,18 @@
   .panel-body{padding:10px 12px;display:flex;flex-direction:column;gap:8px;}
   .panel-note{font-size:11.5px;color:#8a8574;line-height:1.4;}
 
-  .layer-row{display:flex;align-items:center;gap:8px;padding:6px 8px;border:1px solid var(--line);border-radius:8px;background:#FBFAF6;}
+  .layer-row{display:flex;align-items:center;gap:8px;padding:6px 8px;border:1px solid var(--line);border-radius:8px 8px 0 0;background:#FBFAF6;}
   .layer-row .lname{flex:1;font-size:13px;font-weight:600;}
   .layer-row .sub{display:flex;gap:2px;}
   .layer-row button.mini{width:22px;height:22px;border:none;background:var(--line);border-radius:5px;font-size:11px;}
+  .layer-row-wrap{}
+  .label-row{display:flex;align-items:center;gap:8px;padding:5px 8px;border:1px solid var(--line);border-top:none;border-radius:0 0 8px 8px;background:#F3F1EA;font-size:12px;}
+  .label-row .label-toggle{display:flex;align-items:center;gap:4px;white-space:nowrap;color:#555;}
+  .label-row select{flex:1;font-size:12px;padding:3px 4px;border-radius:5px;border:1px solid var(--line);background:#fff;min-width:0;}
   .swatch{width:10px;height:10px;border-radius:3px;flex-shrink:0;}
+  .swatch-input{width:22px;height:22px;padding:0;border:1px solid #ccc;border-radius:5px;flex-shrink:0;background:none;}
+  .swatch-input::-webkit-color-swatch-wrapper{padding:2px;}
+  .swatch-input::-webkit-color-swatch{border:none;border-radius:3px;}
 
   .tool-btn-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
   .tool-btn{background:#FBFAF6;border:1px solid var(--line);border-radius:8px;padding:10px 6px;font-size:12px;font-weight:600;text-align:center;color:var(--forest);}
@@ -446,6 +461,15 @@
 
     state.map.on("click", onMapClick);
 
+    var LABEL_MIN_ZOOM = 15;
+    function updateLabelVisibility(){
+      var mapEl = document.getElementById("map");
+      if(state.map.getZoom() < LABEL_MIN_ZOOM) mapEl.classList.add("zoom-far");
+      else mapEl.classList.remove("zoom-far");
+    }
+    state.map.on("zoomend", updateLabelVisibility);
+    updateLabelVisibility();
+
     if(DEFAULT_LAYERS[f.id] && DEFAULT_LAYERS[f.id].length){
       await loadDefaultLayers(f.id); // idempotente: só busca as que ainda não estão salvas
     }
@@ -488,6 +512,53 @@
   });
 
   // ---------------- LAYERS (a) ----------------
+  var FIELD_FRIENDLY_NAMES = {
+    "Parcela":"Nome da parcela", "PARCELA":"Nome da parcela", "parcela":"Nome da parcela",
+    "nome":"Nome", "NOME":"Nome", "Nome":"Nome", "name":"Nome", "NAME":"Nome",
+    "id":"ID", "ID":"ID", "FID":"ID",
+    "Ha":"Área (ha)", "area":"Área", "ANO":"Ano", "PLANTAS":"Nº de plantas",
+    "VARIEDADE":"Variedade", "UDF":"UDF", "codigo":"Código"
+  };
+  var FIELD_PRIORITY = ["Parcela","PARCELA","parcela","nome","NOME","Nome","name","NAME","id","ID","FID","Ha","UDF","ANO","VARIEDADE","PLANTAS"];
+  var FIELD_SKIP = {"Rot_labels":true, "auxiliary_":true, "auxiliar_1":true, "auxiliar_2":true};
+
+  function fieldLabel(key){ return FIELD_FRIENDLY_NAMES[key] || key; }
+
+  function getLayerFieldOptions(geojson){
+    var seen = {};
+    var feats = (geojson && geojson.features) || [];
+    var sample = feats.slice(0, 30);
+    sample.forEach(function(f){
+      var props = f.properties || {};
+      Object.keys(props).forEach(function(k){
+        if(FIELD_SKIP[k]) return;
+        seen[k] = true;
+      });
+    });
+    var keys = Object.keys(seen);
+    keys.sort(function(a,b){
+      var pa = FIELD_PRIORITY.indexOf(a), pb = FIELD_PRIORITY.indexOf(b);
+      if(pa<0) pa = 999; if(pb<0) pb = 999;
+      if(pa!==pb) return pa-pb;
+      return a.localeCompare(b);
+    });
+    return keys.map(function(k){ return {key:k, label:fieldLabel(k)}; });
+  }
+
+  // Para camadas antigas (já salvas antes desta funcionalidade existir), decide um
+  // padrão razoável na hora, sem precisar o usuário reconfigurar nada.
+  function resolveLabelSettings(l){
+    if(l.labelOn!==undefined && l.labelField!==undefined){
+      return {on:l.labelOn, field:l.labelField};
+    }
+    var opts = getLayerFieldOptions(l.geojson).map(function(o){return o.key;});
+    var candidates = ["Parcela","PARCELA","parcela","nome","NOME","Nome","name","NAME"];
+    for(var i=0;i<candidates.length;i++){
+      if(opts.indexOf(candidates[i])>=0) return {on:true, field:candidates[i]};
+    }
+    return {on:false, field:opts[0]||null};
+  }
+
   function renderLayersPanel(){
     var list = document.getElementById("layers-list");
     if(!state.layers.length){
@@ -496,10 +567,13 @@
     }
     list.innerHTML = "";
     state.layers.forEach(function(l, idx){
+      var wrap = document.createElement("div");
+      wrap.className = "layer-row-wrap";
+
       var row = document.createElement("div");
       row.className = "layer-row";
       row.innerHTML =
-        '<span class="swatch" style="background:'+l.color+'"></span>'+
+        '<input type="color" class="swatch-input" data-act="color" data-id="'+l.id+'" value="'+l.color+'" title="Trocar cor da camada">'+
         '<span class="lname">'+l.name+'</span>'+
         '<span class="sub">'+
         '<button class="mini" data-act="up" data-id="'+l.id+'" '+(idx===0?"disabled":"")+'>▲</button>'+
@@ -507,7 +581,25 @@
         '<button class="mini" data-act="del" data-id="'+l.id+'">✕</button>'+
         '</span>'+
         '<input type="checkbox" data-act="toggle" data-id="'+l.id+'" '+(l.visible?"checked":"")+'>';
-      list.appendChild(row);
+      wrap.appendChild(row);
+
+      var labelSettings = resolveLabelSettings(l);
+      var fieldOpts = getLayerFieldOptions(l.geojson);
+      var labelRow = document.createElement("div");
+      labelRow.className = "label-row";
+      var optsHtml = fieldOpts.map(function(o){
+        return '<option value="'+o.key+'" '+(o.key===labelSettings.field?"selected":"")+'>'+o.label+'</option>';
+      }).join("");
+      labelRow.innerHTML =
+        '<label class="label-toggle">'+
+        '<input type="checkbox" data-act="label-toggle" data-id="'+l.id+'" '+(labelSettings.on?"checked":"")+'>'+
+        '🏷️ Rótulo</label>'+
+        '<select data-act="label-field" data-id="'+l.id+'" '+(fieldOpts.length?"":"disabled")+'>'+
+        (fieldOpts.length ? optsHtml : '<option>— sem campos —</option>')+
+        '</select>';
+      wrap.appendChild(labelRow);
+
+      list.appendChild(wrap);
     });
   }
   document.getElementById("layers-list").addEventListener("click", function(e){
@@ -522,13 +614,33 @@
   });
   document.getElementById("layers-list").addEventListener("change", function(e){
     var t = e.target;
-    if(t.getAttribute("data-act")!=="toggle") return;
+    var act = t.getAttribute("data-act");
     var id = t.getAttribute("data-id");
     var l = state.layers.filter(function(x){return x.id===id;})[0];
     if(!l) return;
-    l.visible = t.checked;
-    if(l.visible){ l.leafletLayer.addTo(state.map); } else { state.map.removeLayer(l.leafletLayer); }
-    persistLayers();
+    if(act==="toggle"){
+      l.visible = t.checked;
+      if(l.visible){ l.leafletLayer.addTo(state.map); } else { state.map.removeLayer(l.leafletLayer); }
+      persistLayers();
+    } else if(act==="color"){
+      l.color = t.value;
+      l.leafletLayer.eachLayer(function(child){
+        if(child.setStyle){ child.setStyle({color:l.color, fillColor:l.color}); }
+      });
+      persistLayers();
+    } else if(act==="label-toggle"){
+      var cur = resolveLabelSettings(l);
+      l.labelOn = t.checked;
+      if(l.labelField===undefined) l.labelField = cur.field;
+      rebuildLayerRendering(l);
+      persistLayers();
+    } else if(act==="label-field"){
+      var cur2 = resolveLabelSettings(l);
+      l.labelField = t.value;
+      if(l.labelOn===undefined) l.labelOn = cur2.on;
+      rebuildLayerRendering(l);
+      persistLayers();
+    }
   });
   function swapLayers(i,j){
     var tmp = state.layers[i]; state.layers[i]=state.layers[j]; state.layers[j]=tmp;
@@ -544,13 +656,15 @@
   function persistLayers(){
     if(!state.farm) return;
     var toSave = state.layers.map(function(l){
-      return {id:l.id, name:l.name, color:l.color, visible:l.visible, geojson:l.geojson};
+      return {id:l.id, name:l.name, color:l.color, visible:l.visible, geojson:l.geojson,
+              labelOn:l.labelOn, labelField:l.labelField};
     });
     storeSet("layers:"+state.farm.id, toSave);
   }
 
-  function addLayerToMap(l, persist){
-    var color = l.color || state.palette[state.layers.length % state.palette.length];
+  function buildLeafletLayer(l){
+    var color = l.color;
+    var labelSettings = resolveLabelSettings(l);
     var leafletLayer = L.geoJSON(l.geojson, {
       style:function(){ return {color:color, weight:2, fillOpacity:0.25}; },
       pointToLayer:function(feature, latlng){ return L.circleMarker(latlng, {radius:5, color:color, fillOpacity:0.7}); },
@@ -559,14 +673,38 @@
           L.DomEvent.stopPropagation(ev);
           showFeatureInfo(l.name, feature.properties || {});
         });
+        if(labelSettings.on && labelSettings.field){
+          var props = feature.properties || {};
+          var v = props[labelSettings.field];
+          if(v!==undefined && v!==null && String(v).trim()!==""){
+            lyr.bindTooltip(String(v), {permanent:true, direction:"center", className:"parcel-label", opacity:0.9});
+          }
+        }
       }
     });
-    if(l.visible!==false){ leafletLayer.addTo(state.map); }
-    var entry = {id:l.id || ("layer_"+Date.now()+"_"+Math.random().toString(36).slice(2,7)), name:l.name, color:color, visible:l.visible!==false, geojson:l.geojson, leafletLayer:leafletLayer};
+    return leafletLayer;
+  }
+
+  function rebuildLayerRendering(entry){
+    var wasVisible = state.map.hasLayer(entry.leafletLayer);
+    state.map.removeLayer(entry.leafletLayer);
+    entry.leafletLayer = buildLeafletLayer(entry);
+    if(wasVisible || entry.visible){ entry.leafletLayer.addTo(state.map); }
+  }
+
+  function addLayerToMap(l, persist){
+    var color = l.color || state.palette[state.layers.length % state.palette.length];
+    var entry = {
+      id: l.id || ("layer_"+Date.now()+"_"+Math.random().toString(36).slice(2,7)),
+      name: l.name, color: color, visible: l.visible!==false, geojson: l.geojson,
+      labelOn: l.labelOn, labelField: l.labelField
+    };
+    entry.leafletLayer = buildLeafletLayer(entry);
+    if(entry.visible){ entry.leafletLayer.addTo(state.map); }
     state.layers.push(entry);
     if(persist) persistLayers();
     renderLayersPanel();
-    try{ state.map.fitBounds(leafletLayer.getBounds(), {maxZoom:15}); }catch(e){}
+    try{ state.map.fitBounds(entry.leafletLayer.getBounds(), {maxZoom:15}); }catch(e){}
   }
 
   function showFeatureInfo(layerName, props){
