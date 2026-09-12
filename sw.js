@@ -1,5 +1,5 @@
-const APP_CACHE = "sococo-app-v10";
-const TILE_CACHE = "sococo-tiles-v10";
+const APP_CACHE = "sococo-app-v12";
+const TILE_CACHE = "sococo-tiles-v12";
 
 const APP_SHELL = [
   "./index.html",
@@ -49,7 +49,7 @@ self.addEventListener("activate", (event) => {
 });
 
 function isTileRequest(url) {
-  return /tile\.openstreetmap\.org/.test(url);
+  return /tile\.openstreetmap\.org/.test(url) || /arcgisonline\.com\/ArcGIS\/rest\/services/.test(url);
 }
 
 self.addEventListener("fetch", (event) => {

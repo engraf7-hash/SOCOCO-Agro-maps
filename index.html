@@ -117,6 +117,10 @@
   #toast.show{opacity:0.95;}
 
   .leaflet-control-attribution{font-size:9px !important;}
+  .leaflet-control-layers{font-size:15px !important; border-radius:10px !important;}
+  .leaflet-control-layers-toggle{width:38px !important; height:38px !important;}
+  .leaflet-control-layers label{padding:4px 2px !important; display:flex !important; align-items:center;}
+  .leaflet-control-layers-selector{width:18px !important; height:18px !important; margin-right:8px !important;}
 </style>
 </head>
 <body>
@@ -413,9 +417,24 @@
     if(state.map){ state.map.remove(); }
     state.map = L.map("map", {zoomControl:false, attributionControl:true}).setView(center, zoom);
     L.control.zoom({position:"bottomright"}).addTo(state.map);
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{
+
+    // ---------------- CAMADAS BASE (Mapa / Satélite / Relevo) ----------------
+    var baseMapa = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{
       maxZoom:19, attribution:"© OpenStreetMap"
-    }).addTo(state.map);
+    });
+    var baseSatelite = L.tileLayer(
+      "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+      {maxZoom:19, attribution:"Tiles © Esri — Source: Esri, Maxar, Earthstar Geographics"}
+    );
+    var baseRelevo = L.tileLayer(
+      "https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}",
+      {maxZoom:19, attribution:"Tiles © Esri — Source: Esri, USGS, NOAA"}
+    );
+    state.baseLayers = {"Mapa": baseMapa, "Satélite": baseSatelite, "Relevo": baseRelevo};
+
+    var savedBase = (savedView && savedView.basemap && state.baseLayers[savedView.basemap]) ? savedView.basemap : "Mapa";
+    state.baseLayers[savedBase].addTo(state.map);
+    L.control.layers(state.baseLayers, null, {position:"topright", collapsed:true}).addTo(state.map);
 
     state.drawnLayer = new L.FeatureGroup();
     state.map.addLayer(state.drawnLayer);
@@ -789,7 +808,11 @@
   // ---------------- OFFLINE / SAVE MAP (g) ----------------
   document.getElementById("btn-save-offline").addEventListener("click", async function(){
     var c = state.map.getCenter();
-    await storeSet("mapview:"+state.farm.id, {lat:c.lat, lng:c.lng, zoom:state.map.getZoom()});
+    var baseName = "Mapa";
+    Object.keys(state.baseLayers||{}).forEach(function(k){
+      if(state.map.hasLayer(state.baseLayers[k])) baseName = k;
+    });
+    await storeSet("mapview:"+state.farm.id, {lat:c.lat, lng:c.lng, zoom:state.map.getZoom(), basemap:baseName});
     persistLayers();
     toast("Configuração da fazenda salva.");
   });
