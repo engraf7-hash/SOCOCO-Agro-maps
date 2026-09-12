@@ -1,0 +1,1010 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Mapas das Fazendas — Sococo S.A.</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#1F3D2C">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Mapas Sococo">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --forest:#1F3D2C;
+    --forest-light:#3C6B4A;
+    --soil:#7A5230;
+    --ochre:#C98A3E;
+    --cream:#F4F1E8;
+    --ink:#1B1B16;
+    --line:#DCD6C6;
+    --white:#FFFFFF;
+    --danger:#A5432F;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;height:100%;font-family:'Inter',system-ui,sans-serif;color:var(--ink);background:var(--cream);overflow:hidden;}
+  h1,h2,h3,.brand{font-family:'Manrope',sans-serif;}
+  button{font-family:inherit;cursor:pointer;}
+  #app{height:100%;width:100%;position:relative;}
+
+  /* ---------- HOME ---------- */
+  #home{height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;background:
+    radial-gradient(circle at 20% 15%, rgba(60,107,74,0.18), transparent 45%),
+    radial-gradient(circle at 85% 80%, rgba(201,138,62,0.15), transparent 40%),
+    var(--cream);}
+  #home .eyebrow{color:var(--forest-light);font-weight:600;font-size:13px;letter-spacing:0.02em;margin-bottom:6px;}
+  #home h1{font-size:28px;font-weight:800;color:var(--forest);margin:0 0 4px;text-align:center;}
+  #home p.sub{color:#5b5b4f;margin:0 0 28px;text-align:center;max-width:320px;font-size:14px;}
+  #farm-list{display:flex;flex-direction:column;gap:12px;width:100%;max-width:380px;}
+  .farm-card{background:var(--white);border:1px solid var(--line);border-radius:14px;padding:16px 18px;display:flex;align-items:center;justify-content:space-between;gap:12px;transition:transform .15s ease, box-shadow .15s ease;text-align:left;}
+  .farm-card:active{transform:scale(0.98);}
+  .farm-card:hover{box-shadow:0 4px 14px rgba(31,61,44,0.12);}
+  .farm-card .fc-left{display:flex;align-items:center;gap:12px;}
+  .farm-card .fc-dot{width:10px;height:10px;border-radius:50%;background:var(--ochre);flex-shrink:0;}
+  .farm-card .fc-name{font-weight:700;font-size:15px;color:var(--forest);}
+  .farm-card .fc-status{font-size:12px;color:#8a8574;margin-top:2px;}
+  .farm-card .fc-arrow{color:var(--forest-light);font-size:18px;}
+
+  /* ---------- MAP SCREEN ---------- */
+  #map-screen{display:none;height:100%;width:100%;position:relative;}
+  #map{position:absolute;inset:0;}
+  .parcel-label{
+    background:none!important;border:none!important;box-shadow:none!important;
+    color:#fff;font-weight:700;font-size:11px;
+    text-shadow:-1px -1px 0 #000,1px -1px 0 #000,-1px 1px 0 #000,1px 1px 0 #000,0 0 3px rgba(0,0,0,.8);
+    pointer-events:none;white-space:nowrap;
+  }
+  .parcel-label::before{display:none;}
+  #map.zoom-far .parcel-label{display:none;}
+  #topbar{position:absolute;top:0;left:0;right:0;z-index:1000;height:52px;background:var(--forest);color:var(--white);display:flex;align-items:center;padding:0 8px;gap:8px;box-shadow:0 2px 8px rgba(0,0,0,0.15);}
+  #topbar .icon-btn{background:none;border:none;color:var(--white);font-size:18px;width:36px;height:36px;border-radius:8px;display:flex;align-items:center;justify-content:center;}
+  #topbar .icon-btn:active{background:rgba(255,255,255,0.15);}
+  #topbar .title{font-weight:700;font-size:14px;flex:1;}
+  #topbar .status-dot{width:8px;height:8px;border-radius:50%;margin-right:6px;}
+  #topbar .status-txt{font-size:11px;opacity:0.85;}
+
+  #toolbar{position:absolute;left:8px;top:64px;z-index:1000;display:flex;flex-direction:column;gap:6px;}
+  #toolbar button{width:42px;height:42px;border-radius:10px;border:1px solid var(--line);background:var(--white);font-size:18px;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 4px rgba(0,0,0,0.12);}
+  #toolbar button.active{background:var(--forest);color:var(--white);border-color:var(--forest);}
+
+  .panel{position:absolute;left:8px;top:64px;z-index:1001;width:250px;max-height:72%;overflow-y:auto;background:var(--white);border-radius:12px;border:1px solid var(--line);box-shadow:0 8px 24px rgba(0,0,0,0.18);display:none;}
+  .panel.open{display:block;}
+  .panel-head{padding:12px 14px;border-bottom:1px solid var(--line);font-weight:700;font-size:13px;color:var(--forest);display:flex;justify-content:space-between;align-items:center;}
+  .panel-head button{background:none;border:none;font-size:16px;color:#8a8574;}
+  .panel-body{padding:10px 12px;display:flex;flex-direction:column;gap:8px;}
+  .panel-note{font-size:11.5px;color:#8a8574;line-height:1.4;}
+
+  .layer-row{display:flex;align-items:center;gap:8px;padding:6px 8px;border:1px solid var(--line);border-radius:8px;background:#FBFAF6;}
+  .layer-row .lname{flex:1;font-size:13px;font-weight:600;}
+  .layer-row .sub{display:flex;gap:2px;}
+  .layer-row button.mini{width:22px;height:22px;border:none;background:var(--line);border-radius:5px;font-size:11px;}
+  .swatch{width:10px;height:10px;border-radius:3px;flex-shrink:0;}
+  .swatch-input{width:22px;height:22px;padding:0;border:1px solid #ccc;border-radius:5px;flex-shrink:0;background:none;}
+  .swatch-input::-webkit-color-swatch-wrapper{padding:2px;}
+  .swatch-input::-webkit-color-swatch{border:none;border-radius:3px;}
+
+  .tool-btn-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+  .tool-btn{background:#FBFAF6;border:1px solid var(--line);border-radius:8px;padding:10px 6px;font-size:12px;font-weight:600;text-align:center;color:var(--forest);}
+  .tool-btn.on{background:var(--ochre);color:var(--white);border-color:var(--ochre);}
+  .tool-btn.full{grid-column:1 / -1;}
+  .tool-btn.danger{color:var(--danger);}
+
+  .file-row{display:flex;flex-direction:column;gap:4px;padding:8px;border:1px solid var(--line);border-radius:8px;background:#FBFAF6;}
+  .file-row .fr-top{display:flex;justify-content:space-between;align-items:center;}
+  .file-row .fr-name{font-size:13px;font-weight:700;}
+  .file-row .fr-meta{font-size:11px;color:#8a8574;}
+  .file-row .fr-actions{display:flex;gap:6px;margin-top:4px;}
+  .file-row .fr-actions button{font-size:11px;padding:4px 8px;border-radius:6px;border:1px solid var(--line);background:var(--white);}
+
+  input[type=text],input[type=number],input[type=file]{width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:8px;font-size:13px;background:var(--white);}
+  .field-label{font-size:11.5px;font-weight:600;color:var(--forest);margin-bottom:2px;display:block;}
+  .btn{background:var(--forest);color:var(--white);border:none;border-radius:8px;padding:9px 12px;font-size:13px;font-weight:700;}
+  .btn.secondary{background:var(--white);color:var(--forest);border:1px solid var(--forest);}
+  .btn.block{width:100%;}
+  .row-gap{display:flex;gap:8px;}
+
+  #info-sheet{position:absolute;left:0;right:0;bottom:0;z-index:1002;background:var(--white);border-top-left-radius:16px;border-top-right-radius:16px;box-shadow:0 -6px 20px rgba(0,0,0,0.18);max-height:40%;overflow-y:auto;transform:translateY(100%);transition:transform .2s ease;padding:14px 16px 20px;}
+  #info-sheet.open{transform:translateY(0);}
+  #info-sheet h3{margin:0 0 8px;font-size:14px;color:var(--forest);}
+  #info-sheet .close{position:absolute;top:10px;right:14px;background:none;border:none;font-size:16px;color:#8a8574;}
+  #info-sheet table{width:100%;border-collapse:collapse;font-size:12.5px;}
+  #info-sheet td{padding:4px 0;border-bottom:1px solid var(--line);}
+  #info-sheet td:first-child{font-weight:600;color:var(--soil);width:40%;}
+
+  /* modal */
+  #modal-overlay{position:absolute;inset:0;background:rgba(27,27,22,0.45);z-index:2000;display:none;align-items:center;justify-content:center;padding:24px;}
+  #modal-overlay.open{display:flex;}
+  #modal-box{background:var(--white);border-radius:14px;padding:18px;width:100%;max-width:320px;}
+  #modal-box h3{margin:0 0 10px;font-size:15px;color:var(--forest);}
+
+  #toast{position:absolute;bottom:18px;left:50%;transform:translateX(-50%);background:var(--ink);color:var(--white);padding:9px 16px;border-radius:20px;font-size:12.5px;z-index:3000;opacity:0;pointer-events:none;transition:opacity .2s ease;}
+  #toast.show{opacity:0.95;}
+
+  .leaflet-control-attribution{font-size:9px !important;}
+  .leaflet-control-layers{font-size:15px !important; border-radius:10px !important;}
+  .leaflet-control-layers-toggle{width:38px !important; height:38px !important;}
+  .leaflet-control-layers label{padding:4px 2px !important; display:flex !important; align-items:center;}
+  .leaflet-control-layers-selector{width:18px !important; height:18px !important; margin-right:8px !important;}
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- HOME -->
+  <div id="home">
+    <div class="eyebrow">SOCOCO S.A.</div>
+    <h1>Mapas das Fazendas</h1>
+    <p class="sub">Escolha a unidade agrícola para abrir o mapa, camadas e ferramentas de campo.</p>
+    <div id="farm-list"></div>
+    <button id="install-btn" class="btn secondary" style="display:none;margin-top:22px;">Instalar no celular</button>
+  </div>
+
+  <!-- MAP SCREEN -->
+  <div id="map-screen">
+    <div id="map"></div>
+
+    <div id="topbar">
+      <button class="icon-btn" id="btn-back" title="Voltar">←</button>
+      <div>
+        <div class="title" id="farm-title">—</div>
+        <div style="display:flex;align-items:center;"><span class="status-dot" id="status-dot" style="background:#7CC98A;"></span><span class="status-txt" id="status-txt">online</span></div>
+      </div>
+    </div>
+
+    <div id="toolbar">
+      <button data-tool="layers" title="a · Camadas ativas">▤</button>
+      <button data-tool="import" title="b · Importar arquivo">⇪</button>
+      <button data-tool="draw" title="c · Ferramentas de medição/desenho">✎</button>
+      <button data-tool="files" title="f · Arquivos criados">🗂</button>
+      <button data-tool="offline" title="g · Baixar / salvar mapa">⬇</button>
+      <button data-tool="locate" title="h · Localizar">⌖</button>
+      <button data-tool="route" title="I · Criar rota">➜</button>
+      <button data-tool="gps" title="GPS — mostrar minha posição">◉</button>
+    </div>
+
+    <!-- a: layers -->
+    <div class="panel" id="panel-layers">
+      <div class="panel-head">Camadas ativas <button data-close>✕</button></div>
+      <div class="panel-body" id="layers-list"><div class="panel-note">Nenhuma camada carregada ainda. Use "Importar arquivo" para adicionar shapes desta fazenda.</div></div>
+    </div>
+
+    <!-- b: import -->
+    <div class="panel" id="panel-import">
+      <div class="panel-head">Importar camada <button data-close>✕</button></div>
+      <div class="panel-body">
+        <span class="field-label">Arquivo (GeoJSON, KML/KMZ ou ZIP de shapefile)</span>
+        <input type="file" id="file-input" accept=".geojson,.json,.kml,.kmz,.zip">
+        <div class="panel-note">Formatos .shp/.zip e .kml/.kmz são convertidos automaticamente. Envie os arquivos da fazenda pelo chat e eu adiciono a camada aqui.</div>
+      </div>
+    </div>
+
+    <!-- c: draw/measure -->
+    <div class="panel" id="panel-draw">
+      <div class="panel-head">Medição e desenho <button data-close>✕</button></div>
+      <div class="panel-body">
+        <div class="tool-btn-row">
+          <button class="tool-btn" data-act="measure-dist">d1 · Medir distância</button>
+          <button class="tool-btn" data-act="measure-area">d2 · Medir área</button>
+          <button class="tool-btn" data-act="draw-line">d3 · Desenhar linha</button>
+          <button class="tool-btn" data-act="draw-polygon">d5 · Desenhar polígono</button>
+          <button class="tool-btn full" id="track-btn" data-act="track">d6 · Iniciar gravação de trajeto</button>
+        </div>
+        <div class="panel-note" id="draw-hint">Toque no mapa para marcar pontos. Finalize com duplo toque no último ponto.</div>
+      </div>
+    </div>
+
+    <!-- f: created files -->
+    <div class="panel" id="panel-files">
+      <div class="panel-head">Arquivos criados <button data-close>✕</button></div>
+      <div class="panel-body" id="files-list"><div class="panel-note">Nenhum arquivo salvo ainda (linhas, polígonos ou trajetos).</div></div>
+    </div>
+
+    <!-- g: offline -->
+    <div class="panel" id="panel-offline">
+      <div class="panel-head">Salvar mapa <button data-close>✕</button></div>
+      <div class="panel-body">
+        <button class="btn block" id="btn-save-offline">Salvar configuração atual desta fazenda</button>
+        <div class="panel-note">Salva a área visível, as camadas ativas e a ordem de exibição para reabrir rapidamente. O download de imagens de satélite para uso 100% offline depende do app nativo (fora deste protótipo web).</div>
+      </div>
+    </div>
+
+    <!-- h: locate -->
+    <div class="panel" id="panel-locate">
+      <div class="panel-head">Localizar <button data-close>✕</button></div>
+      <div class="panel-body">
+        <span class="field-label">h1 · Filtrar por camada / atributo</span>
+        <div class="row-gap">
+          <input type="text" id="filter-input" placeholder="Ex.: nome da parcela...">
+        </div>
+        <button class="btn secondary block" id="btn-filter">Buscar</button>
+        <span class="field-label" style="margin-top:6px;">h2 · Ir para coordenadas</span>
+        <div class="row-gap">
+          <input type="text" id="coord-lat" placeholder="Latitude">
+          <input type="text" id="coord-lng" placeholder="Longitude">
+        </div>
+        <button class="btn secondary block" id="btn-goto-coord">Localizar no mapa</button>
+        <div class="panel-note">h3 · Toque em qualquer ponto do mapa e escolha "Criar rota até aqui" no balão que aparece.</div>
+      </div>
+    </div>
+
+    <!-- I: route -->
+    <div class="panel" id="panel-route">
+      <div class="panel-head">Criar rota <button data-close>✕</button></div>
+      <div class="panel-body">
+        <button class="tool-btn full" id="route-toggle" data-act="route-mode">Ativar modo rota (toque no mapa para adicionar pontos)</button>
+        <span class="field-label" style="margin-top:6px;">I4 · Ou adicionar por coordenadas</span>
+        <div class="row-gap">
+          <input type="text" id="route-lat" placeholder="Latitude">
+          <input type="text" id="route-lng" placeholder="Longitude">
+        </div>
+        <button class="btn secondary block" id="btn-route-add-coord">I2 · Inserir ponto</button>
+        <button class="btn secondary block" id="btn-route-remove">I3 · Remover último ponto</button>
+        <div id="route-summary" class="panel-note">Nenhum ponto adicionado.</div>
+        <button class="btn block" id="btn-route-save">Salvar rota</button>
+        <button class="btn secondary block" id="btn-route-clear">Limpar rota</button>
+      </div>
+    </div>
+
+    <div id="info-sheet">
+      <button class="close" id="info-close">✕</button>
+      <h3 id="info-title">Parcela</h3>
+      <table id="info-table"></table>
+    </div>
+  </div>
+
+  <div id="modal-overlay">
+    <div id="modal-box">
+      <h3 id="modal-title">Salvar</h3>
+      <div id="modal-body"></div>
+    </div>
+  </div>
+
+  <div id="toast"></div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
+<script src="https://unpkg.com/shpjs@4.0.4/dist/shp.min.js"></script>
+<script>
+(function(){
+  "use strict";
+
+  // ---------------- FARMS ----------------
+  var FARMS = [
+    {id:"moju", name:"Fazenda Sococo Moju", center:[-2.1436,-48.7736], zoom:12},
+    {id:"reunidas", name:"Fazendas Reunidas Sococo", center:[-1.2989,-48.1572], zoom:12},
+    {id:"saojose", name:"Fazenda São José", center:[-2.1001,-48.7380], zoom:14}
+  ];
+
+  // Camadas oficiais pré-carregadas por fazenda (arquivos entregues pelo usuário,
+  // convertidos de shapefile para GeoJSON em WGS84 e empacotados junto com o app).
+  var DEFAULT_LAYERS = {
+    moju: [
+      {file:"data/moju/sococo_geral.geojson", name:"Parcelas — Sococo Geral"},
+      {file:"data/moju/parcelas_adm.geojson", name:"Parcelas — ADM"},
+      {file:"data/moju/parcelas_boa_fama.geojson", name:"Parcelas — Boa Fama"},
+      {file:"data/moju/parcelas_industrial.geojson", name:"Parcelas — Industrial"},
+      {file:"data/moju/parcelas_piaueira.geojson", name:"Parcelas — Piaueira"},
+      {file:"data/moju/parcelas_lm.geojson", name:"Parcelas — LM"},
+      {file:"data/moju/parcelas_burraria.geojson", name:"Parcelas — Burraria"},
+      {file:"data/moju/estradas_internas.geojson", name:"Estradas internas"},
+      {file:"data/moju/estradas_estaduais.geojson", name:"Estradas estaduais (entorno)"}
+    ],
+    reunidas: [
+      {file:"data/reunidas/parcelas_geral.geojson", name:"Parcelas — Geral"},
+      {file:"data/reunidas/area_frota.geojson", name:"Área Frota"},
+      {file:"data/reunidas/area_malam.geojson", name:"Área Malam"},
+      {file:"data/reunidas/area_viveiro.geojson", name:"Área Viveiro"},
+      {file:"data/reunidas/base_industrial.geojson", name:"Base Industrial"},
+      {file:"data/reunidas/area_evaristo.geojson", name:"Área Evaristo"},
+      {file:"data/reunidas/bloco_10.geojson", name:"Bloco 10"},
+      {file:"data/reunidas/area_p03.geojson", name:"Área P03"},
+      {file:"data/reunidas/bloco_areal.geojson", name:"Bloco Areial"},
+      {file:"data/reunidas/bloco_gringo.geojson", name:"Bloco Gringo"},
+      {file:"data/reunidas/burraria_velha.geojson", name:"Burraria Velha"},
+      {file:"data/reunidas/burreiro15.geojson", name:"Burreiro 15"},
+      {file:"data/reunidas/portao_japones.geojson", name:"Portão do Japonês"},
+      {file:"data/reunidas/area_baixinha.geojson", name:"Área Baixinha"},
+      {file:"data/reunidas/experimento_yara.geojson", name:"Experimento Yara"},
+      {file:"data/reunidas/3_tubos.geojson", name:"3 Tubos"},
+      {file:"data/reunidas/cc_03.geojson", name:"CC-03"},
+      {file:"data/reunidas/area_administrativo.geojson", name:"Área Administrativo"},
+      {file:"data/reunidas/area_imovel.geojson", name:"Área do Imóvel"},
+      {file:"data/reunidas/estradas.geojson", name:"Estradas"}
+    ],
+    saojose: [
+      {file:"data/saojose/parcelas.geojson", name:"Parcelas — Sococo (20)"},
+      {file:"data/saojose/perimetro.geojson", name:"Perímetro da Fazenda"}
+    ]
+  };
+
+  var state = {
+    farm:null, map:null, layers:[], createdFiles:[],
+    drawnLayer:null, drawControl:null, activeDrawer:null,
+    trackWatchId:null, trackPoints:[], trackPolyline:null,
+    gpsWatchId:null, gpsMarker:null,
+    routeMode:false, routePoints:[], routeLine:null, routeMarkers:[],
+    palette:["#3C6B4A","#C98A3E","#7A5230","#2E6E8E","#8E3C5D","#5B7A2E"]
+  };
+
+  // ---------------- STORAGE HELPERS ----------------
+  // Usa window.storage quando disponível (preview dentro do Claude);
+  // fora daqui (PWA hospedado) cai automaticamente para localStorage do navegador.
+  async function storeGet(key){
+    if(window.storage){
+      try{ var r = await window.storage.get(key,false); return r ? JSON.parse(r.value) : null; }catch(e){}
+    }
+    try{ var v = localStorage.getItem(key); return v ? JSON.parse(v) : null; }
+    catch(e){ return null; }
+  }
+  async function storeSet(key,val){
+    if(window.storage){
+      try{ await window.storage.set(key, JSON.stringify(val), false); return true; }catch(e){}
+    }
+    try{ localStorage.setItem(key, JSON.stringify(val)); return true; }
+    catch(e){ return false; }
+  }
+
+  function toast(msg){
+    var t = document.getElementById("toast");
+    t.textContent = msg; t.classList.add("show");
+    clearTimeout(t._h); t._h = setTimeout(function(){ t.classList.remove("show"); }, 2600);
+  }
+
+  // ---------------- HOME ----------------
+  function buildHome(){
+    var list = document.getElementById("farm-list");
+    list.innerHTML = "";
+    FARMS.forEach(function(f){
+      var el = document.createElement("button");
+      el.className = "farm-card";
+      el.innerHTML = '<div class="fc-left"><span class="fc-dot"></span><div><div class="fc-name">'+f.name+'</div>'+
+        '<div class="fc-status" id="fc-status-'+f.id+'">aguardando dados</div></div></div><span class="fc-arrow">→</span>';
+      el.addEventListener("click", function(){ openFarm(f.id); });
+      list.appendChild(el);
+    });
+    FARMS.forEach(refreshFarmStatus);
+  }
+
+  async function refreshFarmStatus(f){
+    var layers = await storeGet("layers:"+f.id);
+    var el = document.getElementById("fc-status-"+f.id);
+    if(el) el.textContent = (layers && layers.length) ? (layers.length+" camada(s) carregada(s)") : "aguardando dados";
+  }
+
+  // ---------------- DEFAULT LAYERS (dados oficiais entregues pelo usuário) ----------------
+  // Carrega de forma incremental: cada camada padrão tem um id fixo baseado no nome do
+  // arquivo (não no índice), então adicionar novas camadas depois não duplica nem exige
+  // resetar o app de quem já usou a fazenda antes.
+  async function loadDefaultLayers(farmId){
+    var defs = DEFAULT_LAYERS[farmId] || [];
+    var existing = await storeGet("layers:"+farmId) || [];
+    var existingIds = {};
+    existing.forEach(function(l){ existingIds[l.id] = true; });
+    var changed = false;
+    for(var i=0;i<defs.length;i++){
+      var d = defs[i];
+      var layerId = "default_"+farmId+"_"+d.file;
+      if(existingIds[layerId]) continue; // já carregada antes
+      try{
+        var res = await fetch(d.file);
+        if(!res.ok) throw new Error("HTTP "+res.status);
+        var gj = await res.json();
+        existing.push({
+          id: layerId,
+          name: d.name,
+          color: state.palette[i % state.palette.length],
+          visible: true,
+          geojson: gj
+        });
+        changed = true;
+      }catch(err){
+        console.warn("Não foi possível carregar camada padrão", d.file, err);
+      }
+    }
+    if(changed) await storeSet("layers:"+farmId, existing);
+  }
+
+  // ---------------- MAP SCREEN ----------------
+  async function openFarm(farmId){
+    var f = FARMS.filter(function(x){return x.id===farmId;})[0];
+    state.farm = f;
+    document.getElementById("home").style.display = "none";
+    document.getElementById("map-screen").style.display = "block";
+    document.getElementById("farm-title").textContent = f.name;
+    closeAllPanels();
+
+    var savedView = await storeGet("mapview:"+f.id);
+    var center = savedView ? [savedView.lat,savedView.lng] : f.center;
+    var zoom = savedView ? savedView.zoom : f.zoom;
+
+    if(state.map){ state.map.remove(); }
+    state.map = L.map("map", {zoomControl:false, attributionControl:true}).setView(center, zoom);
+    L.control.zoom({position:"bottomright"}).addTo(state.map);
+
+    // ---------------- CAMADAS BASE (Mapa / Satélite / Relevo) ----------------
+    var baseMapa = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{
+      maxZoom:19, attribution:"© OpenStreetMap"
+    });
+    var baseSatelite = L.tileLayer(
+      "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+      {maxZoom:19, attribution:"Tiles © Esri — Source: Esri, Maxar, Earthstar Geographics"}
+    );
+    var baseRelevo = L.tileLayer(
+      "https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}",
+      {maxZoom:19, attribution:"Tiles © Esri — Source: Esri, USGS, NOAA"}
+    );
+    state.baseLayers = {"Mapa": baseMapa, "Satélite": baseSatelite, "Relevo": baseRelevo};
+
+    var savedBase = (savedView && savedView.basemap && state.baseLayers[savedView.basemap]) ? savedView.basemap : "Mapa";
+    state.baseLayers[savedBase].addTo(state.map);
+    L.control.layers(state.baseLayers, null, {position:"topright", collapsed:true}).addTo(state.map);
+
+    state.drawnLayer = new L.FeatureGroup();
+    state.map.addLayer(state.drawnLayer);
+
+    state.layers = [];
+    state.createdFiles = [];
+    state.routePoints = []; state.routeLine = null; state.routeMarkers = [];
+    document.getElementById("route-summary").textContent = "Nenhum ponto adicionado.";
+
+    state.map.on("click", onMapClick);
+
+    var LABEL_MIN_ZOOM = 15;
+    function updateLabelVisibility(){
+      var mapEl = document.getElementById("map");
+      if(state.map.getZoom() < LABEL_MIN_ZOOM) mapEl.classList.add("zoom-far");
+      else mapEl.classList.remove("zoom-far");
+    }
+    state.map.on("zoomend", updateLabelVisibility);
+    updateLabelVisibility();
+
+    if(DEFAULT_LAYERS[f.id] && DEFAULT_LAYERS[f.id].length){
+      await loadDefaultLayers(f.id); // idempotente: só busca as que ainda não estão salvas
+    }
+
+    var savedLayers = await storeGet("layers:"+f.id) || [];
+    savedLayers.forEach(function(l){ addLayerToMap(l, false); });
+    renderLayersPanel();
+
+    var savedFiles = await storeGet("created:"+f.id) || [];
+    state.createdFiles = savedFiles;
+    renderFilesPanel();
+  }
+
+  document.getElementById("btn-back").addEventListener("click", function(){
+    if(state.gpsWatchId!=null) stopGps();
+    if(state.trackWatchId!=null) toast("Pare a gravação de trajeto antes de sair.");
+    document.getElementById("map-screen").style.display = "none";
+    document.getElementById("home").style.display = "flex";
+    if(state.farm) refreshFarmStatus(state.farm);
+  });
+
+  // ---------------- PANELS ----------------
+  var PANEL_IDS = ["layers","import","draw","files","offline","locate","route"];
+  function closeAllPanels(){
+    PANEL_IDS.forEach(function(id){ document.getElementById("panel-"+id).classList.remove("open"); });
+    document.querySelectorAll("#toolbar button").forEach(function(b){ b.classList.remove("active"); });
+  }
+  document.getElementById("toolbar").addEventListener("click", function(e){
+    var btn = e.target.closest("button[data-tool]");
+    if(!btn) return;
+    var tool = btn.getAttribute("data-tool");
+    if(tool==="gps"){ toggleGps(btn); return; }
+    var panel = document.getElementById("panel-"+tool);
+    var wasOpen = panel.classList.contains("open");
+    closeAllPanels();
+    if(!wasOpen){ panel.classList.add("open"); btn.classList.add("active"); }
+  });
+  document.querySelectorAll("[data-close]").forEach(function(b){
+    b.addEventListener("click", function(){ closeAllPanels(); });
+  });
+
+  // ---------------- LAYERS (a) ----------------
+  function renderLayersPanel(){
+    var list = document.getElementById("layers-list");
+    if(!state.layers.length){
+      list.innerHTML = '<div class="panel-note">Nenhuma camada carregada ainda. Use "Importar arquivo" para adicionar shapes desta fazenda.</div>';
+      return;
+    }
+    list.innerHTML = "";
+    state.layers.forEach(function(l, idx){
+      var row = document.createElement("div");
+      row.className = "layer-row";
+      row.innerHTML =
+        '<input type="color" class="swatch-input" data-act="color" data-id="'+l.id+'" value="'+l.color+'" title="Trocar cor da camada">'+
+        '<span class="lname">'+l.name+'</span>'+
+        '<span class="sub">'+
+        '<button class="mini" data-act="up" data-id="'+l.id+'" '+(idx===0?"disabled":"")+'>▲</button>'+
+        '<button class="mini" data-act="down" data-id="'+l.id+'" '+(idx===state.layers.length-1?"disabled":"")+'>▼</button>'+
+        '<button class="mini" data-act="del" data-id="'+l.id+'">✕</button>'+
+        '</span>'+
+        '<input type="checkbox" data-act="toggle" data-id="'+l.id+'" '+(l.visible?"checked":"")+'>';
+      list.appendChild(row);
+    });
+  }
+  document.getElementById("layers-list").addEventListener("click", function(e){
+    var b = e.target.closest("button[data-act]");
+    if(!b) return;
+    var id = b.getAttribute("data-id"), act = b.getAttribute("data-act");
+    var idx = state.layers.findIndex(function(l){return l.id===id;});
+    if(idx<0) return;
+    if(act==="del"){ removeLayer(idx); }
+    if(act==="up" && idx>0){ swapLayers(idx, idx-1); }
+    if(act==="down" && idx<state.layers.length-1){ swapLayers(idx, idx+1); }
+  });
+  document.getElementById("layers-list").addEventListener("change", function(e){
+    var t = e.target;
+    var act = t.getAttribute("data-act");
+    var id = t.getAttribute("data-id");
+    var l = state.layers.filter(function(x){return x.id===id;})[0];
+    if(!l) return;
+    if(act==="toggle"){
+      l.visible = t.checked;
+      if(l.visible){ l.leafletLayer.addTo(state.map); } else { state.map.removeLayer(l.leafletLayer); }
+      persistLayers();
+    } else if(act==="color"){
+      l.color = t.value;
+      l.leafletLayer.eachLayer(function(child){
+        if(child.setStyle){ child.setStyle({color:l.color, fillColor:l.color}); }
+      });
+      persistLayers();
+    }
+  });
+  function swapLayers(i,j){
+    var tmp = state.layers[i]; state.layers[i]=state.layers[j]; state.layers[j]=tmp;
+    state.layers.forEach(function(l){ l.leafletLayer.bringToFront(); });
+    renderLayersPanel(); persistLayers();
+  }
+  function removeLayer(idx){
+    var l = state.layers[idx];
+    state.map.removeLayer(l.leafletLayer);
+    state.layers.splice(idx,1);
+    renderLayersPanel(); persistLayers();
+  }
+  function persistLayers(){
+    if(!state.farm) return;
+    var toSave = state.layers.map(function(l){
+      return {id:l.id, name:l.name, color:l.color, visible:l.visible, geojson:l.geojson};
+    });
+    storeSet("layers:"+state.farm.id, toSave);
+  }
+
+  function getFeatureLabel(props){
+    if(!props) return null;
+    var candidates = ["Parcela","PARCELA","parcela","nome","NOME","Nome","name","NAME"];
+    for(var i=0;i<candidates.length;i++){
+      var v = props[candidates[i]];
+      if(v!==undefined && v!==null && String(v).trim()!=="") return String(v);
+    }
+    return null;
+  }
+  function addLayerToMap(l, persist){
+    var color = l.color || state.palette[state.layers.length % state.palette.length];
+    var leafletLayer = L.geoJSON(l.geojson, {
+      style:function(){ return {color:color, weight:2, fillOpacity:0.25}; },
+      pointToLayer:function(feature, latlng){ return L.circleMarker(latlng, {radius:5, color:color, fillOpacity:0.7}); },
+      onEachFeature:function(feature, lyr){
+        lyr.on("click", function(ev){
+          L.DomEvent.stopPropagation(ev);
+          showFeatureInfo(l.name, feature.properties || {});
+        });
+        var labelText = getFeatureLabel(feature.properties);
+        if(labelText){
+          lyr.bindTooltip(labelText, {permanent:true, direction:"center", className:"parcel-label", opacity:0.9});
+        }
+      }
+    });
+    if(l.visible!==false){ leafletLayer.addTo(state.map); }
+    var entry = {id:l.id || ("layer_"+Date.now()+"_"+Math.random().toString(36).slice(2,7)), name:l.name, color:color, visible:l.visible!==false, geojson:l.geojson, leafletLayer:leafletLayer};
+    state.layers.push(entry);
+    if(persist) persistLayers();
+    renderLayersPanel();
+    try{ state.map.fitBounds(leafletLayer.getBounds(), {maxZoom:15}); }catch(e){}
+  }
+
+  function showFeatureInfo(layerName, props){
+    var title = document.getElementById("info-title");
+    var table = document.getElementById("info-table");
+    title.textContent = layerName;
+    table.innerHTML = "";
+    var keys = Object.keys(props);
+    if(!keys.length){ table.innerHTML = '<tr><td colspan="2">Sem atributos.</td></tr>'; }
+    keys.forEach(function(k){
+      var tr = document.createElement("tr");
+      tr.innerHTML = "<td>"+k+"</td><td>"+String(props[k])+"</td>";
+      table.appendChild(tr);
+    });
+    document.getElementById("info-sheet").classList.add("open");
+  }
+  document.getElementById("info-close").addEventListener("click", function(){
+    document.getElementById("info-sheet").classList.remove("open");
+  });
+
+  // ---------------- IMPORT (b) ----------------
+  document.getElementById("file-input").addEventListener("change", async function(e){
+    var file = e.target.files[0];
+    if(!file) return;
+    var name = file.name.replace(/\.[^.]+$/,"");
+    var ext = file.name.split(".").pop().toLowerCase();
+    try{
+      if(ext==="geojson" || ext==="json"){
+        var text = await file.text();
+        var gj = JSON.parse(text);
+        addLayerToMap({name:name, geojson:gj, visible:true}, true);
+        toast('Camada "'+name+'" importada.');
+      } else if(ext==="zip"){
+        var buf = await file.arrayBuffer();
+        var gj2 = await shp(buf);
+        addLayerToMap({name:name, geojson:gj2, visible:true}, true);
+        toast('Shapefile "'+name+'" importado.');
+      } else if(ext==="kml" || ext==="kmz"){
+        toast("Importação de KML/KMZ ainda será adicionada — envie o arquivo pelo chat que eu incluo.");
+      } else {
+        toast("Formato não reconhecido.");
+      }
+    }catch(err){
+      toast("Não foi possível ler o arquivo: "+err.message);
+    }
+    closeAllPanels();
+    e.target.value = "";
+  });
+
+  // ---------------- DRAW / MEASURE (c) ----------------
+  function haversine(a,b){
+    var R=6371000, toRad=function(d){return d*Math.PI/180;};
+    var dLat=toRad(b.lat-a.lat), dLng=toRad(b.lng-a.lng);
+    var s = Math.sin(dLat/2)*Math.sin(dLat/2) + Math.cos(toRad(a.lat))*Math.cos(toRad(b.lat))*Math.sin(dLng/2)*Math.sin(dLng/2);
+    return R*2*Math.atan2(Math.sqrt(s), Math.sqrt(1-s));
+  }
+  function lineLength(latlngs){
+    var d=0; for(var i=1;i<latlngs.length;i++){ d+=haversine(latlngs[i-1],latlngs[i]); } return d;
+  }
+  function polygonArea(latlngs){
+    try{ return L.GeometryUtil.geodesicArea(latlngs); }
+    catch(e){
+      var area=0, j=latlngs.length-1;
+      for(var i=0;i<latlngs.length;i++){ area += (latlngs[j].lng+latlngs[i].lng)*(latlngs[j].lat-latlngs[i].lat); j=i; }
+      return Math.abs(area*111320*111320/2);
+    }
+  }
+
+  var tempDrawLayer = null, drawMode = null;
+  function stopDrawMode(){
+    if(state._leafletDraw){ state._leafletDraw.disable(); state._leafletDraw=null; }
+    drawMode = null;
+    document.querySelectorAll(".tool-btn[data-act]").forEach(function(b){ b.classList.remove("on"); });
+  }
+  document.getElementById("panel-draw").addEventListener("click", function(e){
+    var b = e.target.closest(".tool-btn");
+    if(!b) return;
+    var act = b.getAttribute("data-act");
+    if(act==="track"){ toggleTrack(b); return; }
+    stopDrawMode();
+    b.classList.add("on");
+    if(act==="measure-dist"){
+      drawMode="dist";
+      state._leafletDraw = new L.Draw.Polyline(state.map, {maxPoints:2, shapeOptions:{color:"#2E6E8E"}});
+      state._leafletDraw.enable();
+      document.getElementById("draw-hint").textContent = "Toque dois pontos no mapa para medir a distância.";
+    } else if(act==="measure-area"){
+      drawMode="area";
+      state._leafletDraw = new L.Draw.Polygon(state.map, {shapeOptions:{color:"#8E3C5D"}});
+      state._leafletDraw.enable();
+      document.getElementById("draw-hint").textContent = "Desenhe o polígono e finalize tocando no primeiro ponto.";
+    } else if(act==="draw-line"){
+      drawMode="line";
+      state._leafletDraw = new L.Draw.Polyline(state.map, {shapeOptions:{color:"#3C6B4A"}});
+      state._leafletDraw.enable();
+      document.getElementById("draw-hint").textContent = "Desenhe a linha; duplo toque no último ponto para finalizar.";
+    } else if(act==="draw-polygon"){
+      drawMode="polygon";
+      state._leafletDraw = new L.Draw.Polygon(state.map, {shapeOptions:{color:"#C98A3E"}});
+      state._leafletDraw.enable();
+      document.getElementById("draw-hint").textContent = "Desenhe o polígono da parcela e finalize tocando no primeiro ponto.";
+    }
+  });
+
+  state.map = null; // placeholder, real map set on openFarm
+  document.addEventListener("draw:created", function(){}); // fallback no-op
+
+  function bindDrawEvents(){
+    state.map.on(L.Draw.Event.CREATED, function(e){
+      var layer = e.layer;
+      state.drawnLayer.addLayer(layer);
+      if(drawMode==="dist"){
+        var latlngs = layer.getLatLngs();
+        var d = lineLength(latlngs);
+        toast("Distância: "+(d>=1000?(d/1000).toFixed(2)+" km":d.toFixed(1)+" m"));
+        state.drawnLayer.removeLayer(layer);
+      } else if(drawMode==="area"){
+        var latlngsA = layer.getLatLngs()[0];
+        var a = polygonArea(latlngsA);
+        toast("Área: "+(a>=10000?(a/10000).toFixed(2)+" ha":a.toFixed(1)+" m²"));
+        state.drawnLayer.removeLayer(layer);
+      } else if(drawMode==="line"){
+        var ll = layer.getLatLngs();
+        var dist = lineLength(ll);
+        openSaveModal("Salvar linha", "Nome da linha", function(name){
+          saveCreatedFile({type:"line", name:name, geojson:layer.toGeoJSON(), distance:dist});
+        }, function(){ state.drawnLayer.removeLayer(layer); });
+      } else if(drawMode==="polygon"){
+        var ll2 = layer.getLatLngs()[0];
+        var area = polygonArea(ll2);
+        openSaveModal("Salvar polígono", "Nome do polígono", function(name){
+          saveCreatedFile({type:"polygon", name:name, geojson:layer.toGeoJSON(), area:area});
+        }, function(){ state.drawnLayer.removeLayer(layer); });
+      }
+      stopDrawMode();
+    });
+  }
+
+  function toggleTrack(btn){
+    if(state.trackWatchId==null){
+      if(!navigator.geolocation){ toast("GPS não disponível neste dispositivo/navegador."); return; }
+      state.trackPoints = [];
+      state.trackPolyline = L.polyline([], {color:"#A5432F", weight:4}).addTo(state.map);
+      state.trackWatchId = navigator.geolocation.watchPosition(function(pos){
+        var ll = [pos.coords.latitude, pos.coords.longitude];
+        state.trackPoints.push(ll);
+        state.trackPolyline.addLatLng(ll);
+      }, function(err){ toast("Erro de GPS: "+err.message); }, {enableHighAccuracy:true});
+      btn.textContent = "d6 · Parar gravação de trajeto";
+      btn.classList.add("on");
+      toast("Gravação de trajeto iniciada.");
+    } else {
+      navigator.geolocation.clearWatch(state.trackWatchId);
+      state.trackWatchId = null;
+      btn.textContent = "d6 · Iniciar gravação de trajeto";
+      btn.classList.remove("on");
+      if(state.trackPoints.length>1){
+        var latlngs = state.trackPoints.map(function(p){return {lat:p[0],lng:p[1]};});
+        var d = lineLength(latlngs);
+        openSaveModal("Salvar trajeto", "Nome do trajeto", function(name){
+          saveCreatedFile({type:"track", name:name, geojson:state.trackPolyline.toGeoJSON(), distance:d});
+        }, function(){ state.map.removeLayer(state.trackPolyline); });
+      } else {
+        state.map.removeLayer(state.trackPolyline);
+        toast("Trajeto muito curto — descartado.");
+      }
+    }
+  }
+
+  // ---------------- MODAL ----------------
+  function openSaveModal(title, label, onSave, onCancel){
+    var overlay = document.getElementById("modal-overlay");
+    document.getElementById("modal-title").textContent = title;
+    var body = document.getElementById("modal-body");
+    body.innerHTML = '<span class="field-label">'+label+'</span><input type="text" id="modal-input" placeholder="Digite um nome...">'+
+      '<div class="row-gap" style="margin-top:12px;"><button class="btn secondary block" id="modal-cancel">Excluir</button>'+
+      '<button class="btn block" id="modal-save">Salvar</button></div>';
+    overlay.classList.add("open");
+    document.getElementById("modal-input").focus();
+    document.getElementById("modal-save").onclick = function(){
+      var v = document.getElementById("modal-input").value.trim() || "Sem nome";
+      overlay.classList.remove("open");
+      onSave(v);
+    };
+    document.getElementById("modal-cancel").onclick = function(){
+      overlay.classList.remove("open");
+      if(onCancel) onCancel();
+    };
+  }
+
+  // ---------------- CREATED FILES (f) ----------------
+  function saveCreatedFile(f){
+    f.id = "file_"+Date.now()+"_"+Math.random().toString(36).slice(2,7);
+    f.createdAt = new Date().toISOString();
+    state.createdFiles.push(f);
+    persistCreated();
+    renderFilesPanel();
+    toast('"'+f.name+'" salvo.');
+  }
+  function persistCreated(){
+    if(!state.farm) return;
+    storeSet("created:"+state.farm.id, state.createdFiles);
+  }
+  function renderFilesPanel(){
+    var list = document.getElementById("files-list");
+    if(!state.createdFiles.length){
+      list.innerHTML = '<div class="panel-note">Nenhum arquivo salvo ainda (linhas, polígonos ou trajetos).</div>';
+      return;
+    }
+    list.innerHTML = "";
+    state.createdFiles.forEach(function(f){
+      var meta = f.type==="polygon" ? ((f.area>=10000?(f.area/10000).toFixed(2)+" ha":f.area.toFixed(1)+" m²"))
+        : (f.distance!=null ? (f.distance>=1000?(f.distance/1000).toFixed(2)+" km":f.distance.toFixed(1)+" m") : "");
+      var row = document.createElement("div");
+      row.className = "file-row";
+      row.innerHTML = '<div class="fr-top"><span class="fr-name">'+f.name+'</span><span class="fr-meta">'+({line:"linha",polygon:"polígono",track:"trajeto"}[f.type]||f.type)+'</span></div>'+
+        '<div class="fr-meta">'+meta+'</div>'+
+        '<div class="fr-actions"><button data-act="show" data-id="'+f.id+'">Mostrar</button><button data-act="del" data-id="'+f.id+'">Excluir</button></div>';
+      list.appendChild(row);
+    });
+  }
+  document.getElementById("files-list").addEventListener("click", function(e){
+    var b = e.target.closest("button[data-act]");
+    if(!b) return;
+    var id = b.getAttribute("data-id"), act = b.getAttribute("data-act");
+    var f = state.createdFiles.filter(function(x){return x.id===id;})[0];
+    if(!f) return;
+    if(act==="del"){
+      state.createdFiles = state.createdFiles.filter(function(x){return x.id!==id;});
+      persistCreated(); renderFilesPanel(); toast("Excluído.");
+    } else if(act==="show"){
+      var lyr = L.geoJSON(f.geojson, {style:{color:"#A5432F", weight:3}});
+      lyr.addTo(state.map);
+      try{ state.map.fitBounds(lyr.getBounds(), {maxZoom:16}); }catch(err){}
+      closeAllPanels();
+    }
+  });
+
+  // ---------------- OFFLINE / SAVE MAP (g) ----------------
+  document.getElementById("btn-save-offline").addEventListener("click", async function(){
+    var c = state.map.getCenter();
+    var baseName = "Mapa";
+    Object.keys(state.baseLayers||{}).forEach(function(k){
+      if(state.map.hasLayer(state.baseLayers[k])) baseName = k;
+    });
+    await storeSet("mapview:"+state.farm.id, {lat:c.lat, lng:c.lng, zoom:state.map.getZoom(), basemap:baseName});
+    persistLayers();
+    toast("Configuração da fazenda salva.");
+  });
+
+  // ---------------- LOCATE (h) ----------------
+  document.getElementById("btn-goto-coord").addEventListener("click", function(){
+    var lat = parseFloat(document.getElementById("coord-lat").value);
+    var lng = parseFloat(document.getElementById("coord-lng").value);
+    if(isNaN(lat) || isNaN(lng)){ toast("Coordenadas inválidas."); return; }
+    L.marker([lat,lng]).addTo(state.map).bindPopup("Ponto localizado").openPopup();
+    state.map.setView([lat,lng], 16);
+    closeAllPanels();
+  });
+  document.getElementById("btn-filter").addEventListener("click", function(){
+    var q = document.getElementById("filter-input").value.trim().toLowerCase();
+    if(!q){ toast("Digite um termo para buscar."); return; }
+    var found = 0;
+    state.layers.forEach(function(l){
+      l.leafletLayer.eachLayer(function(sub){
+        var props = (sub.feature && sub.feature.properties) || {};
+        var match = Object.keys(props).some(function(k){ return String(props[k]).toLowerCase().indexOf(q)>-1; });
+        if(match){
+          found++;
+          try{ state.map.fitBounds(sub.getBounds ? sub.getBounds() : L.latLngBounds([sub.getLatLng()]), {maxZoom:16}); }catch(e){}
+        }
+      });
+    });
+    toast(found ? (found+" resultado(s) encontrado(s).") : "Nenhum resultado encontrado.");
+  });
+
+  // ---------------- ROUTE (I) ----------------
+  document.getElementById("route-toggle").addEventListener("click", function(){
+    state.routeMode = !state.routeMode;
+    this.classList.toggle("on", state.routeMode);
+    this.textContent = state.routeMode ? "Modo rota ativo — toque no mapa" : "Ativar modo rota (toque no mapa para adicionar pontos)";
+  });
+  document.getElementById("btn-route-add-coord").addEventListener("click", function(){
+    var lat = parseFloat(document.getElementById("route-lat").value);
+    var lng = parseFloat(document.getElementById("route-lng").value);
+    if(isNaN(lat) || isNaN(lng)){ toast("Coordenadas inválidas."); return; }
+    addRoutePoint(L.latLng(lat,lng));
+  });
+  document.getElementById("btn-route-remove").addEventListener("click", function(){
+    if(!state.routePoints.length){ toast("Rota vazia."); return; }
+    state.routePoints.pop();
+    var m = state.routeMarkers.pop();
+    if(m) state.map.removeLayer(m);
+    redrawRoute();
+  });
+  document.getElementById("btn-route-clear").addEventListener("click", function(){
+    state.routePoints = [];
+    state.routeMarkers.forEach(function(m){ state.map.removeLayer(m); });
+    state.routeMarkers = [];
+    redrawRoute();
+  });
+  document.getElementById("btn-route-save").addEventListener("click", function(){
+    if(state.routePoints.length<2){ toast("Adicione ao menos 2 pontos."); return; }
+    var gj = state.routeLine.toGeoJSON();
+    var d = lineLength(state.routePoints);
+    openSaveModal("Salvar rota", "Nome da rota", function(name){
+      saveCreatedFile({type:"line", name:"Rota: "+name, geojson:gj, distance:d});
+    }, function(){});
+  });
+  function addRoutePoint(latlng){
+    state.routePoints.push(latlng);
+    var m = L.circleMarker(latlng, {radius:6, color:"#C98A3E", fillOpacity:1}).addTo(state.map);
+    state.routeMarkers.push(m);
+    redrawRoute();
+  }
+  function redrawRoute(){
+    if(state.routeLine){ state.map.removeLayer(state.routeLine); state.routeLine=null; }
+    var summary = document.getElementById("route-summary");
+    if(state.routePoints.length<2){
+      summary.textContent = state.routePoints.length===1 ? "1 ponto adicionado. Adicione mais um para formar a rota." : "Nenhum ponto adicionado.";
+      return;
+    }
+    state.routeLine = L.polyline(state.routePoints, {color:"#C98A3E", weight:3, dashArray:"6 6"}).addTo(state.map);
+    var d = lineLength(state.routePoints);
+    summary.textContent = state.routePoints.length+" pontos · "+(d>=1000?(d/1000).toFixed(2)+" km":d.toFixed(0)+" m")+" (linha reta entre pontos)";
+  }
+
+  function onMapClick(e){
+    if(state.routeMode){ addRoutePoint(e.latlng); return; }
+  }
+
+  // ---------------- GPS BLUE DOT ----------------
+  function toggleGps(btn){
+    if(state.gpsWatchId==null){
+      if(!navigator.geolocation){ toast("GPS não disponível neste dispositivo/navegador."); return; }
+      navigator.geolocation.getCurrentPosition(function(){}, function(err){
+        toast("Não foi possível acessar o GPS: "+err.message);
+      });
+      state.gpsWatchId = navigator.geolocation.watchPosition(function(pos){
+        var ll = [pos.coords.latitude, pos.coords.longitude];
+        if(!state.gpsMarker){
+          state.gpsMarker = L.circleMarker(ll, {radius:8, color:"#2E6E8E", fillColor:"#4FA8E0", fillOpacity:0.9, weight:2}).addTo(state.map);
+        } else {
+          state.gpsMarker.setLatLng(ll);
+        }
+      }, function(err){ toast("Erro de GPS: "+err.message); state.gpsWatchId=null; btn.classList.remove("active"); }, {enableHighAccuracy:true});
+      btn.classList.add("active");
+    } else {
+      stopGps();
+      btn.classList.remove("active");
+    }
+  }
+  function stopGps(){
+    if(state.gpsWatchId!=null){ navigator.geolocation.clearWatch(state.gpsWatchId); state.gpsWatchId=null; }
+    if(state.gpsMarker){ state.map.removeLayer(state.gpsMarker); state.gpsMarker=null; }
+  }
+
+  // ---------------- ONLINE STATUS ----------------
+  function updateOnlineStatus(){
+    var online = navigator.onLine;
+    document.getElementById("status-dot").style.background = online ? "#7CC98A" : "#C9A23C";
+    document.getElementById("status-txt").textContent = online ? "online" : "offline";
+  }
+  window.addEventListener("online", updateOnlineStatus);
+  window.addEventListener("offline", updateOnlineStatus);
+
+  // ---------------- INIT ----------------
+  var origOpenFarm = openFarm;
+  openFarm = async function(farmId){
+    await origOpenFarm(farmId);
+    bindDrawEvents();
+    updateOnlineStatus();
+  };
+
+  buildHome();
+
+  if("serviceWorker" in navigator){
+    window.addEventListener("load", function(){
+      navigator.serviceWorker.register("sw.js").catch(function(err){
+        console.warn("Service worker não registrado:", err);
+      });
+    });
+  }
+
+  window.addEventListener("beforeinstallprompt", function(e){
+    e.preventDefault();
+    window._deferredInstallPrompt = e;
+    var btn = document.getElementById("install-btn");
+    if(btn) btn.style.display = "inline-flex";
+  });
+  document.getElementById("install-btn").addEventListener("click", function(){
+    if(!window._deferredInstallPrompt) return;
+    window._deferredInstallPrompt.prompt();
+    window._deferredInstallPrompt = null;
+    this.style.display = "none";
+  });
+})();
+</script>
+</body>
+</html>
