@@ -1,5 +1,5 @@
-const APP_CACHE = "sococo-app-v18";
-const TILE_CACHE = "sococo-tiles-v18";
+const APP_CACHE = "sococo-app-v19";
+const TILE_CACHE = "sococo-tiles-v19";
 
 const APP_SHELL = [
   "./index.html",
