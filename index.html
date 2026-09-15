@@ -422,27 +422,34 @@
   async function loadDefaultLayers(farmId){
     var defs = DEFAULT_LAYERS[farmId] || [];
     var existing = await storeGet("layers:"+farmId) || [];
-    var existingIds = {};
-    existing.forEach(function(l){ existingIds[l.id] = true; });
+    var byId = {};
+    existing.forEach(function(l){ byId[l.id] = l; });
     var changed = false;
     for(var i=0;i<defs.length;i++){
       var d = defs[i];
       var layerId = "default_"+farmId+"_"+d.file;
-      if(existingIds[layerId]) continue; // já carregada antes
       try{
-        var res = await fetch(d.file);
+        var res = await fetch(d.file, {cache:"no-store"});
         if(!res.ok) throw new Error("HTTP "+res.status);
         var gj = await res.json();
-        existing.push({
-          id: layerId,
-          name: d.name,
-          color: state.palette[i % state.palette.length],
-          visible: true,
-          geojson: gj
-        });
+        var prev = byId[layerId];
+        if(prev){
+          // já existia: atualiza a geometria (o arquivo pode ter sido corrigido/atualizado),
+          // mas preserva a cor e a visibilidade que o usuário já tinha escolhido
+          prev.geojson = gj;
+        } else {
+          existing.push({
+            id: layerId,
+            name: d.name,
+            color: state.palette[i % state.palette.length],
+            visible: true,
+            geojson: gj
+          });
+        }
         changed = true;
       }catch(err){
-        console.warn("Não foi possível carregar camada padrão", d.file, err);
+        // sem internet ou arquivo indisponível: mantém a cópia já salva (se houver) como fallback offline
+        console.warn("Não foi possível atualizar camada padrão", d.file, err);
       }
     }
     if(changed) await storeSet("layers:"+farmId, existing);
