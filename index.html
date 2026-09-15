@@ -228,6 +228,7 @@
           <button class="tool-btn" data-act="draw-line">d3 · Desenhar linha</button>
           <button class="tool-btn" data-act="draw-polygon">d5 · Desenhar polígono</button>
           <button class="tool-btn full" id="track-btn" data-act="track">d6 · Iniciar gravação de trajeto</button>
+          <button class="tool-btn full" data-act="recpoint">📍 Gravar ponto (posição atual)</button>
         </div>
         <div class="panel-note" id="draw-hint">Toque no mapa para marcar pontos. Finalize com duplo toque no último ponto.</div>
       </div>
@@ -235,8 +236,8 @@
 
     <!-- f: created files -->
     <div class="panel" id="panel-files">
-      <div class="panel-head">Arquivos criados <button data-close>✕</button></div>
-      <div class="panel-body" id="files-list"><div class="panel-note">Nenhum arquivo salvo ainda (linhas, polígonos ou trajetos).</div></div>
+      <div class="panel-head">Arquivos gravados <button data-close>✕</button></div>
+      <div class="panel-body" id="files-list"><div class="panel-note">Nenhum arquivo salvo ainda (pontos, linhas, polígonos ou trajetos).</div></div>
     </div>
 
     <!-- g: offline -->
@@ -744,6 +745,7 @@
     if(!b) return;
     var act = b.getAttribute("data-act");
     if(act==="track"){ toggleTrack(b); return; }
+    if(act==="recpoint"){ recordPoint(); return; }
     stopDrawMode();
     b.classList.add("on");
     if(act==="measure-dist"){
@@ -834,7 +836,27 @@
     }
   }
 
-  // ---------------- MODAL ----------------
+  function recordPoint(){
+    if(!navigator.geolocation){ toast("GPS não disponível neste dispositivo/navegador."); return; }
+    toast("Obtendo sua posição...");
+    navigator.geolocation.getCurrentPosition(function(pos){
+      var lat = pos.coords.latitude, lng = pos.coords.longitude;
+      var acc = pos.coords.accuracy;
+      var marker = L.circleMarker([lat,lng], {radius:7, color:"#C98A3E", fillColor:"#C98A3E", fillOpacity:0.9, weight:2}).addTo(state.map);
+      openSaveModal("Salvar ponto", "Nome do ponto", function(name){
+        saveCreatedFile({
+          type:"point", name:name,
+          geojson:{type:"Feature", properties:{nome:name}, geometry:{type:"Point", coordinates:[lng,lat]}},
+          lat:lat, lng:lng, accuracy:acc
+        });
+        state.map.removeLayer(marker);
+      }, function(){ state.map.removeLayer(marker); });
+    }, function(err){
+      toast("Erro de GPS: "+err.message);
+    }, {enableHighAccuracy:true, timeout:15000});
+  }
+
+
   function openSaveModal(title, label, onSave, onCancel){
     var overlay = document.getElementById("modal-overlay");
     document.getElementById("modal-title").textContent = title;
@@ -871,18 +893,25 @@
   function renderFilesPanel(){
     var list = document.getElementById("files-list");
     if(!state.createdFiles.length){
-      list.innerHTML = '<div class="panel-note">Nenhum arquivo salvo ainda (linhas, polígonos ou trajetos).</div>';
+      list.innerHTML = '<div class="panel-note">Nenhum arquivo salvo ainda (pontos, linhas, polígonos ou trajetos).</div>';
       return;
     }
     list.innerHTML = "";
+    var typeLabel = {point:"ponto", line:"linha", polygon:"polígono", track:"trajeto"};
     state.createdFiles.forEach(function(f){
       var meta = f.type==="polygon" ? ((f.area>=10000?(f.area/10000).toFixed(2)+" ha":f.area.toFixed(1)+" m²"))
+        : f.type==="point" ? (f.lat.toFixed(6)+", "+f.lng.toFixed(6)+(f.accuracy?" (±"+Math.round(f.accuracy)+"m)":""))
         : (f.distance!=null ? (f.distance>=1000?(f.distance/1000).toFixed(2)+" km":f.distance.toFixed(1)+" m") : "");
       var row = document.createElement("div");
       row.className = "file-row";
-      row.innerHTML = '<div class="fr-top"><span class="fr-name">'+f.name+'</span><span class="fr-meta">'+({line:"linha",polygon:"polígono",track:"trajeto"}[f.type]||f.type)+'</span></div>'+
+      row.innerHTML = '<div class="fr-top"><span class="fr-name">'+f.name+'</span><span class="fr-meta">'+(typeLabel[f.type]||f.type)+'</span></div>'+
         '<div class="fr-meta">'+meta+'</div>'+
-        '<div class="fr-actions"><button data-act="show" data-id="'+f.id+'">Mostrar</button><button data-act="del" data-id="'+f.id+'">Excluir</button></div>';
+        '<div class="fr-actions">'+
+          '<button data-act="show" data-id="'+f.id+'">Mostrar</button>'+
+          '<button data-act="rename" data-id="'+f.id+'">Renomear</button>'+
+          '<button data-act="export" data-id="'+f.id+'">Exportar .gpx</button>'+
+          '<button data-act="del" data-id="'+f.id+'">Excluir</button>'+
+        '</div>';
       list.appendChild(row);
     });
   }
@@ -896,12 +925,76 @@
       state.createdFiles = state.createdFiles.filter(function(x){return x.id!==id;});
       persistCreated(); renderFilesPanel(); toast("Excluído.");
     } else if(act==="show"){
-      var lyr = L.geoJSON(f.geojson, {style:{color:"#A5432F", weight:3}});
+      var lyr = f.type==="point"
+        ? L.circleMarker([f.lat,f.lng], {radius:7, color:"#A5432F", fillColor:"#A5432F", fillOpacity:0.9})
+        : L.geoJSON(f.geojson, {style:{color:"#A5432F", weight:3}});
       lyr.addTo(state.map);
-      try{ state.map.fitBounds(lyr.getBounds(), {maxZoom:16}); }catch(err){}
+      try{
+        if(f.type==="point"){ state.map.setView([f.lat,f.lng], 16); }
+        else { state.map.fitBounds(lyr.getBounds(), {maxZoom:16}); }
+      }catch(err){}
       closeAllPanels();
+    } else if(act==="rename"){
+      openSaveModal("Renomear", "Novo nome", function(name){
+        f.name = name; persistCreated(); renderFilesPanel(); toast("Renomeado.");
+      }, function(){});
+      document.getElementById("modal-input").value = f.name;
+      document.getElementById("modal-cancel").textContent = "Cancelar";
+    } else if(act==="export"){
+      var gpx = buildGpx(f);
+      downloadTextFile(sanitizeFileName(f.name)+".gpx", gpx, "application/gpx+xml");
     }
   });
+
+  // ---------------- GPX EXPORT ----------------
+  function sanitizeFileName(name){
+    return (name||"arquivo").normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^a-zA-Z0-9_-]+/g,"_");
+  }
+  function gpxHeader(){
+    return '<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="Mapas Sococo" xmlns="http://www.topografix.com/GPX/1/1">\n';
+  }
+  function buildGpx(f){
+    var xml = gpxHeader();
+    var farmName = (state.farm && state.farm.name) || "";
+    if(f.type==="point"){
+      xml += '  <wpt lat="'+f.lat+'" lon="'+f.lng+'">\n'+
+             '    <name>'+escapeXml(f.name)+'</name>\n'+
+             (farmName ? '    <desc>'+escapeXml(farmName)+'</desc>\n' : '')+
+             '  </wpt>\n';
+    } else {
+      var latlngs = [];
+      if(f.type==="polygon"){
+        var ring = f.geojson.geometry.coordinates[0];
+        latlngs = ring.map(function(c){ return {lat:c[1], lng:c[0]}; });
+      } else if(f.geojson.geometry.type==="LineString"){
+        latlngs = f.geojson.geometry.coordinates.map(function(c){ return {lat:c[1], lng:c[0]}; });
+      } else if(f.geojson.geometry.type==="MultiLineString"){
+        f.geojson.geometry.coordinates.forEach(function(line){
+          line.forEach(function(c){ latlngs.push({lat:c[1], lng:c[0]}); });
+        });
+      }
+      xml += '  <trk>\n    <name>'+escapeXml(f.name)+'</name>\n'+
+             (farmName ? '    <desc>'+escapeXml(farmName)+'</desc>\n' : '')+
+             '    <trkseg>\n'+
+             latlngs.map(function(p){ return '      <trkpt lat="'+p.lat+'" lon="'+p.lng+'"></trkpt>'; }).join("\n")+
+             '\n    </trkseg>\n  </trk>\n';
+    }
+    xml += '</gpx>\n';
+    return xml;
+  }
+  function escapeXml(s){
+    return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+  }
+  function downloadTextFile(filename, content, mime){
+    var blob = new Blob([content], {type:mime});
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement("a");
+    a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click();
+    setTimeout(function(){ document.body.removeChild(a); URL.revokeObjectURL(url); }, 500);
+    toast('"'+filename+'" exportado.');
+  }
+
 
   // ---------------- OFFLINE / SAVE MAP (g) ----------------
   document.getElementById("btn-save-offline").addEventListener("click", async function(){
